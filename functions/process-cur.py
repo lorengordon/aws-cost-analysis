@@ -1,10 +1,17 @@
 from __future__ import print_function
+import json
 import logging
+import os
+import sys
+
 import boto3
+
+__location__ = os.path.dirname(os.path.realpath(__file__))
+sys.path.append(os.path.join(__location__, "../"))
+sys.path.append(os.path.join(__location__, "../vendored"))
+
 import awscostusageprocessor.processor as cur
 import awscostusageprocessor.consts as consts
-
-import json
 
 log = logging.getLogger()
 log.setLevel(logging.INFO)

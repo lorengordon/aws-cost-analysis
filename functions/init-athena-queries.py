@@ -3,8 +3,8 @@ import json
 import sys, os
 
 __location__ = os.path.dirname(os.path.realpath(__file__))
-site_pkgs = os.path.join(os.path.split(__location__)[0], "lib", "python2.7", "site-packages")
-sys.path.append(site_pkgs)
+sys.path.append(os.path.join(__location__, "../"))
+sys.path.append(os.path.join(__location__, "../vendored"))
 
 import awscostusageprocessor.api as curapi
 
@@ -39,15 +39,3 @@ def handler(event, context):
     log.info("Results:{}".format(json.dumps(result_dict,indent=4)))
 
     return event
-
-
-
-
-
-
-
-
-
-
-
-

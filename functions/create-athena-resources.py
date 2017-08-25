@@ -3,9 +3,9 @@ import json
 import os, sys
 
 __location__ = os.path.dirname(os.path.realpath(__file__))
+sys.path.append(os.path.join(__location__, "../"))
+sys.path.append(os.path.join(__location__, "../vendored"))
 sql_path = os.path.join(os.path.split(__location__)[0], "awscostusageprocessor","sql")
-site_pkgs = os.path.join(os.path.split(__location__)[0], "lib", "python2.7", "site-packages")
-sys.path.append(site_pkgs)
 
 import awscostusageprocessor.utils as utils
 import awscostusageprocessor.sql.athena as ath
@@ -52,26 +52,3 @@ def handler(event, context):
     athena.execute_query('create_table', sqlstatement)
 
     return event
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
