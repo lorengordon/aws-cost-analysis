@@ -1,0 +1,10 @@
+{
+  "name": "aws-cost-analysis",
+  "version": "0.0.1",
+  "dependencies": {},
+  "devDependencies": {
+    "serverless-cf-vars": "^0.1.0",
+    "serverless-parameters": "^0.0.3",
+    "serverless-step-functions": "^1.0.2"
+  }
+}

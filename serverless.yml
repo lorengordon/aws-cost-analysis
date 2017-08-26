@@ -2,33 +2,20 @@ service: aws-cost-analysis
 
 plugins:
   - serverless-step-functions
+  - serverless-parameters
+  - serverless-cf-vars
 
-provider:
-  name: aws
-  runtime: python2.7
+custom:
+  AthenaBaseOutputS3Bucket: ${self:service}-${self:provider.stage}-athena
+  CurProcessorDestS3Bucket: ${self:service}-${self:provider.stage}-aggregegated-cur
+  CurProcessorDestS3Prefix: ${env:CUR_PROCESSOR_DEST_S3_PREFIX}
+  LambdaOwnerAwsAccessKeyId: ${env:LAMBDA_OWNER_AWS_ACCESS_KEY_ID, self:custom.defaults.LambdaOwnerAwsAccessKeyId}
+  LambdaOwnerAwsSecretAccessKeyId: ${env:LAMBDA_OWNER_AWS_SECRET_ACCESS_KEY, self:custom.defaults.LambdaOwnerAwsSecretAccessKeyId}
+  defaults:
+    LambdaOwnerAwsAccessKeyId: ""
+    LambdaOwnerAwsSecretAccessKeyId: ""
+    stage: dev
 
-
-# you can add statements to the Lambda function's IAM Role here
-#  iamRoleStatements:
-#    - Effect: "Allow"
-#      Action:
-#        - "s3:ListBucket"
-#      Resource: { "Fn::Join" : ["", ["arn:aws:s3:::", { "Ref" : "ServerlessDeploymentBucket" } ] ]  }
-#    - Effect: "Allow"
-#      Action:
-#        - "s3:PutObject"
-#      Resource:
-#        Fn::Join:
-#          - ""
-#          - - "arn:aws:s3:::"
-#            - "Ref" : "ServerlessDeploymentBucket"
-#            - "/*"
-
-# you can define service wide environment variables here
-#  environment:
-#    variable1: value1
-
-# you can add packaging information here
 package:
 #  include:
 #    - include-me.py
@@ -37,74 +24,112 @@ package:
     - cloudformation/**
     - config/**
     - scripts/**
+    - node_modules/**
     - '**/**/*.dist-info/**'
     - '**/**/__pycache__/**'
     - '**/**/*.pyc'
 
-functions:
-  xAcctStepFunctionStarter:
-    handler: functions/xacct-step-function-starter.handler
+provider:
+  name: aws
+  runtime: python2.7
+  stage: ${opt:stage, self:custom.defaults.stage}
 
+  iamRoleStatements:
+    - Effect: "Allow"
+      Action:
+        - dynamodb:Scan
+      Resource: "arn:#{AWS::Partition}:dynamodb:#{AWS::Region}:#{AWS::AccountId}:table/#{DynamoDbTable}"
+
+# you can define service wide environment variables here
+  environment:
+    ATHENA_BASE_OUTPUT_S3_BUCKET: s3://${self:custom.AthenaBaseOutputS3Bucket}
+    CUR_PROCESSOR_DEST_S3_BUCKET: ${self:custom.CurProcessorDestS3Bucket}
+    CUR_PROCESSOR_DEST_S3_PREFIX: ${self:custom.CurProcessorDestS3Prefix}
+    AWS_ACCOUNT_METADATA_DDB_TABLE:
+      Ref: DynamoDbTable
+    LAMBDA_OWNER_AWS_ACCESS_KEY_ID: ${self:custom.LambdaOwnerAwsAccessKeyId}
+    LAMBDA_OWNER_AWS_SECRET_ACCESS_KEY: ${self:custom.LambdaOwnerAwsSecretAccessKeyId}
+    STEP_FUNCTION_PREPARE_CUR_ATHENA:
+      Ref: ProcessCostUsageReportStepFunctionsStateMachine
+
+functions:
   S3EventStepFunctionStarter:
     handler: functions/s3event-step-function-starter.handler
+    memorySize: 128
+    timeout: 30
+    events:
+      - s3:
+          bucket: ${self:custom.CurProcessorDestS3Bucket}
+          event: s3:ObjectCreated:Put
+
+  xAcctStepFunctionStarter:
+    handler: functions/xacct-step-function-starter.handler
+    memorySize: 128
+    timeout: 30
+    events:
+      - schedule:
+          rate: rate(1 minute)
 
   ProcessCostUsageFunction:
-    handler: functions/functions/process-cur.handler
+    handler: functions/process-cur.handler
+    memorySize: 1536
+    timeout: 300
 
   CreateAthenaResourcesFunction:
     handler: functions/create-athena-resources.handler
+    memorySize: 1536
+    timeout: 300
 
   InitializeAthenaQueriesFunction:
     handler: functions/init-athena-queries.handler
+    memorySize: 1536
+    timeout: 300
 
   UpdateMetadataFunction:
     handler: functions/update-metadata.handler
+    memorySize: 256
+    timeout: 30
 
 stepFunctions:
   stateMachines:
-    build-for-commit:
-
-
-#    The following are a few example events you can configure
-#    NOTE: Please make sure to change your handler code to work with those events
-#    Check the event documentation for details
-#    events:
-#      - http:
-#          path: users/create
-#          method: get
-#      - s3: ${env:BUCKET}
-#      - schedule: rate(10 minutes)
-#      - sns: greeter-topic
-#      - stream: arn:aws:dynamodb:region:XXXXXX:table/foo/stream/1970-01-01T00:00:00.000
-#      - alexaSkill
-#      - iot:
-#          sql: "SELECT * FROM 'some_topic'"
-#      - cloudwatchEvent:
-#          event:
-#            source:
-#              - "aws.ec2"
-#            detail-type:
-#              - "EC2 Instance State-change Notification"
-#            detail:
-#              state:
-#                - pending
-#      - cloudwatchLog: '/aws/lambda/hello'
-#      - cognitoUserPool:
-#          pool: MyUserPool
-#          trigger: PreSignUp
-
-#    Define function environment variables here
-#    environment:
-#      variable2: value2
+    processCostUsageReport:
+      definition:
+        Comment: Process AWS Cost and Usage reports and prepare them for Athena
+        StartAt: ProcessCostUsageReport
+        States:
+          ProcessCostUsageReport:
+            Type: Task
+            Resource: "arn:#{AWS::Partition}:lambda:#{AWS::Region}:#{AWS::AccountId}:function:#{AWS::StackName}-ProcessCostUsageFunction"
+            Next: CreateAthenaResources
+          CreateAthenaResources:
+            Type: Task
+            Resource: "arn:#{AWS::Partition}:lambda:#{AWS::Region}:#{AWS::AccountId}:function:#{AWS::StackName}-CreateAthenaResourcesFunction"
+            Next: UpdateMetadata
+          UpdateMetadata:
+            Type: Task
+            Resource: "arn:#{AWS::Partition}:lambda:#{AWS::Region}:#{AWS::AccountId}:function:#{AWS::StackName}-InitializeAthenaQueriesFunction"
+            Next: InitializeAthenaQueries
+          InitializeAthenaQueries:
+            Type: Task
+            Resource: "arn:#{AWS::Partition}:lambda:#{AWS::Region}:#{AWS::AccountId}:function:#{AWS::StackName}-UpdateMetadataFunction"
+            End: True
 
 # you can add CloudFormation resource templates here
-#resources:
-#  Resources:
-#    NewResource:
-#      Type: AWS::S3::Bucket
-#      Properties:
-#        BucketName: my-new-bucket
-#  Outputs:
-#     NewOutput:
-#       Description: "Description for the output"
-#       Value: "Some output value"
+resources:
+  Resources:
+    S3BucketAthena:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:custom.AthenaBaseOutputS3Bucket}
+    DynamoDbTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        KeySchema:
+          - AttributeName: awsPayerAccountId
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 5
+          WriteCapacityUnits: 5
+        AttributeDefinitions:
+          - AttributeName: awsPayerAccountId
+            AttributeType: S
