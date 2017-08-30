@@ -67,14 +67,16 @@ def handler(event, context):
                                              name=execname,
                                              input=json.dumps(kwargs))
 
-        #Prepare SNS notification
         sfn_executionarn = sfnresponse['executionArn']
         sfn_executionlink = 'https://console.aws.amazon.com/states/home?region=us-east-1#/executions/details/'+sfn_executionarn
-        snsclient.publish(TopicArn=consts.SNS_TOPIC,
-                          Message='New Cost and Usage report. Started execution. Click here to view status:'+sfn_executionlink,
-                          Subject='New incoming Cost and Usage report - accountid:{} - period:{}'.format(curprocessor.accountId, period))
-
         log.info("Started execution - executionArn: {}".format(sfn_executionarn))
+        log.info("Execution URL: {}".format(sfn_executionlink))
+
+        #Prepare SNS notification
+        if consts.SNS_TOPIC:
+            snsclient.publish(TopicArn=consts.SNS_TOPIC,
+                              Message='New Cost and Usage report. Started execution. Click here to view status:'+sfn_executionlink,
+                              Subject='New incoming Cost and Usage report - accountid:{} - period:{}'.format(curprocessor.accountId, period))
 
         return execname
 
