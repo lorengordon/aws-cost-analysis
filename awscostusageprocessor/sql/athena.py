@@ -84,6 +84,8 @@ class AthenaQueryMgr():
         except botocore.exceptions.ClientError as e:
             if e.response['Error']['Code'] == 'NoSuchKey':
                 queryexecutionts = consts.EPOCH_TS
+            else:
+                raise
 
         #if there's a new processed CUR (query execution timestamp < CUR timestamp), then get query fresh
         #else, get queryexecutionid
