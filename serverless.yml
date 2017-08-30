@@ -38,7 +38,38 @@ provider:
     - Effect: "Allow"
       Action:
         - dynamodb:Scan
+        - dynamodb:GetItem
+        - dynamodb:UpdateItem
       Resource: "arn:#{AWS::Partition}:dynamodb:#{AWS::Region}:#{AWS::AccountId}:table/#{DynamoDbTable}"
+    - Effect: "Allow"
+      Action:
+        - s3:ListBucket
+      Resource: "arn:aws:s3:::${self:custom.CurProcessorDestS3Bucket}"
+    - Effect: "Allow"
+      Action:
+        - s3:GetObject
+        - s3:PutObject
+      Resource:
+        - "arn:aws:s3:::${self:custom.CurProcessorDestS3Bucket}/*"
+        - "arn:aws:s3:::#{S3BucketAthena}/*"
+    - Effect: "Allow"
+      Action:
+        - states:StartExecution
+      Resource: "arn:#{AWS::Partition}:states:#{AWS::Region}:#{AWS::AccountId}:stateMachine:#{ProcessCostUsageReportStepFunctionsStateMachine.Name}"
+    - Effect: "Allow"
+      Action:
+        - athena:StartQueryExecution
+        - athena:GetQueryExecution
+      Resource: "*"
+    - Effect: "Allow"
+      Action:
+        - s3:ListBucket
+        - s3:CreateBucket
+        - s3:GetBucketLocation
+        - s3:ListBucketMultipartUploads
+        - s3:ListMultipartUploadParts
+        - s3:AbortMultipartUpload
+      Resource: "arn:aws:s3:::#{S3BucketAthena}"
 
 # you can define service wide environment variables here
   environment:
