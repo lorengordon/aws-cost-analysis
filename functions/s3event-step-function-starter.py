@@ -36,7 +36,11 @@ def handler(event, context):
 
         #Prepare args for CostUsageProcessor
         kwargs = {}
-        sourcePrefix, year, month = utils.extract_period(s3key)
+        try:
+            sourcePrefix, year, month = utils.extract_period(s3key)
+        except IndexError:
+            log.info("Event is not a cost usage report. Ignoring...")
+            return
         log.info("year:[{}] - month:[{}]".format(year,month))
         kwargs['startTimestamp'] = datetime.datetime.now(pytz.utc).strftime(consts.TIMESTAMP_FORMAT)
         kwargs['year'] = year
@@ -46,7 +50,11 @@ def handler(event, context):
         kwargs['destBucket'] = consts.CUR_PROCESSOR_DEST_S3_BUCKET
         kwargs['destPrefix']= '{}placeholder/'.format(consts.CUR_PROCESSOR_DEST_S3_PREFIX)#placeholder is to avoid validation error when instantiating CostUsageProcessor
 
-        curprocessor = cur.CostUsageProcessor(**kwargs)
+        try:
+            curprocessor = cur.CostUsageProcessor(**kwargs)
+        except ValueError:
+            log.info("Event is not a cost usage report. Ignoring...")
+            return
         curprocessor.destPrefix = '{}{}/'.format(consts.CUR_PROCESSOR_DEST_S3_PREFIX, curprocessor.accountId)
 
         kwargs['accountId'] = curprocessor.accountId
